@@ -226,19 +226,3 @@ npm run dev
 
 ---
 
-## 8. Academic Viva Questions & Technical Answers
-
-**Q1: How does OS Sentinel sample CPU utilization without blocking the web server?**  
-*Answer:* OS Sentinel utilizes a singleton background daemon thread (`BackgroundMetricsCollector`) that periodically executes `psutil.cpu_percent(interval=None)` against initialized baselines every 5 seconds. The values are staged in memory and committed to SQLite in a thread-safe manner. When a user requests `/api/v1/system/summary`, the API returns the most recently collected non-blocking measurement rather than pausing the web worker to calculate CPU delta intervals.
-
-**Q2: Why is SQLite WAL (Write-Ahead Logging) mode essential for this application?**  
-*Answer:* In standard rollback journal mode, SQLite locks the entire database file during writes, blocking concurrent read operations. With `PRAGMA journal_mode=WAL;`, writers append new transactions to the WAL file while readers continue reading snapshots from the main database file without blocking. Coupled with `PRAGMA busy_timeout = 5000;`, this eliminates transient `database is locked` errors between the background collector thread and incoming API queries.
-
-**Q3: How does the system prevent alert flapping during transient CPU or Memory spikes?**  
-*Answer:* The `DetectionService` implements a rolling persistence window ($N$ consecutive samples) and asymmetric recovery conditions. An alert is not opened for an isolated single-sample spike; it requires sustained breaches across $N$ samples (default 2 to 3 samples). Furthermore, recovery requires telemetry to drop below a strictly lower recovery threshold (e.g., Warning at 75%, Recovery at 60%), with a configurable cooldown period preventing rapid re-triggering.
-
-**Q4: How does OS Sentinel safeguard against disclosing sensitive command-line secrets?**  
-*Answer:* The `ProcessService.sanitize_cmdline` method parses the argument vector (`sys.argv`) for each inspected process. When it detects sensitive flags such as `--password`, `-p`, `--token`, `--api-key`, `--secret`, or key-value assignments (e.g., `--token=secret`), it masks the corresponding credential value with `***` before the data is transmitted to the frontend or persisted. Ordinary arguments (`--host`, `--port`, `--verbose`) remain untouched.
-
-**Q5: Why does the systemd unit specify `--workers 1 --threads 4` instead of multiple worker processes?**  
-*Answer:* OS Sentinel runs a singleton background metrics collection thread initialized inside the application factory (`create_app`). If Gunicorn is configured with multiple worker processes (`--workers 2`), each process runs an independent copy of `create_app()`, spawning duplicate background collectors that simultaneously write redundant samples to the database. Using 1 worker process with 4 threads maintains a single collection thread while supporting concurrent HTTP request processing.
