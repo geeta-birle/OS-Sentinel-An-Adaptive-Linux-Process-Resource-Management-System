@@ -1,0 +1,25 @@
+[Unit]
+Description=OS Sentinel: Adaptive Linux Process & Resource Management Engine
+After=network.target
+
+[Service]
+Type=simple
+User=%I
+WorkingDirectory=/opt/os-sentinel/backend
+Environment="PATH=/opt/os-sentinel/backend/.venv/bin:/usr/local/bin:/usr/bin"
+Environment="FLASK_ENV=production"
+Environment="FLASK_DEBUG=0"
+Environment="HOST=127.0.0.1"
+Environment="PORT=5000"
+Environment="SENTINEL_DB_PATH=/var/lib/os-sentinel/data/sentinel.db"
+# Use 1 worker with multiple threads to maintain a single background metric collector thread
+ExecStart=/opt/os-sentinel/backend/.venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 wsgi:app
+Restart=on-failure
+RestartSec=5s
+
+# Security sandboxing options (read-only system observation)
+ProtectHome=read-only
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
